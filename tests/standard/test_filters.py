@@ -1,6 +1,7 @@
 """Tests grabbed from:
 https://shopify.github.io/liquid/filters/abs/
 """
+
 import pytest
 from datetime import datetime
 from collections import namedtuple
@@ -210,9 +211,7 @@ def test_newline_filters(set_default_standard):
     assert Liquid("{{ x | newline_to_br }}").render(x="apple\nwatch") == (
         "apple<br />watch"
     )
-    assert Liquid("{{ x | strip_newlines }}").render(x="apple\nwatch") == (
-        "applewatch"
-    )
+    assert Liquid("{{ x | strip_newlines }}").render(x="apple\nwatch") == ("applewatch")
 
 
 def test_filter_var_args(set_default_standard):
@@ -340,8 +339,7 @@ def test_dot(set_default_standard):
     b = lambda: None
     setattr(b, "a-b", 2)
     assert (
-        Liquid("{{a | where: 'a-b', 1 | map: 'a-b' | first}}").render(a=[a, b])
-        == "1"
+        Liquid("{{a | where: 'a-b', 1 | map: 'a-b' | first}}").render(a=[a, b]) == "1"
     )
 
 
@@ -363,26 +361,16 @@ def test_date_arithmetic(tpl, out, set_default_standard):
 
 def test_emptydrop(set_default_standard):
     assert Liquid("{{ obj | sort_natural}}").render(obj=[]) == ""
-    assert (
-        Liquid("{{ obj | sort | bool}}", mode="wild").render(obj=[]) == "False"
-    )
-    assert (
-        Liquid("{{ slice(obj, 0) == False}}", mode="wild").render(obj=[])
-        == "True"
-    )
-    assert (
-        Liquid("{{ uniq(obj) != False}}", mode="wild").render(obj=[])
-        == "False"
-    )
+    assert Liquid("{{ obj | sort | bool}}", mode="wild").render(obj=[]) == "False"
+    assert Liquid("{{ slice(obj, 0) == False}}", mode="wild").render(obj=[]) == "True"
+    assert Liquid("{{ uniq(obj) != False}}", mode="wild").render(obj=[]) == "False"
 
 
 def test_regex_replace(set_default_standard):
     assert Liquid('{{1 | regex_replace: "a"}}').render() == "1"
     assert Liquid('{{"abc" | regex_replace: "a", "b"}}').render() == "bbc"
     assert (
-        Liquid(
-            '{{"abc" | regex_replace: "A", "b", case_sensitive=False}}'
-        ).render()
+        Liquid('{{"abc" | regex_replace: "A", "b", case_sensitive=False}}').render()
         == "bbc"
     )
 
@@ -391,11 +379,11 @@ def test_basic_typecasting(set_default_standard):
     assert Liquid('{{ "1" | int | plus: 1 }}').render() == "2"
     assert Liquid('{{ "1" | float | plus: 1 }}').render() == "2.0"
     assert Liquid('{{ 1 | str | append: "1" }}').render() == "11"
-    assert Liquid('{{ 1 | bool }}').render() == "True"
+    assert Liquid("{{ 1 | bool }}").render() == "True"
     assert Liquid('{{ int("1") | plus: 1 }}').render() == "2"
     assert Liquid('{{ float("1") | plus: 1 }}').render() == "2.0"
     assert Liquid('{{ str(1) | append: "1" }}').render() == "11"
-    assert Liquid('{{ bool(1) }}').render() == "True"
+    assert Liquid("{{ bool(1) }}").render() == "True"
 
 
 def test_attr(set_default_standard):
@@ -405,10 +393,40 @@ def test_attr(set_default_standard):
     assert Liquid('{{x | attr: "y"}}').render(x=namedtuple("X", "y")(2)) == "2"
 
 
+@pytest.mark.parametrize(
+    ("left", "right", "expected"),
+    [
+        ("2", "3", "6"),
+        ("1.5", "2", "3.0"),
+        (2, 3, "6"),
+    ],
+)
+def test_times_coerces_numeric_values(
+    set_default_standard,
+    left,
+    right,
+    expected,
+):
+    assert (
+        Liquid("{{ left | times: right }}").render(
+            left=left,
+            right=right,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize("value", ["x", True, None])
+def test_times_rejects_non_numeric_values(set_default_standard, value):
+    with pytest.raises(TypeError, match="numeric values"):
+        Liquid("{{ value | times: 2 }}").render(value=value)
+
+
 def test_liquid_map(set_default_standard):
     # with standard mode, map works the same as liquid_map
     assert Liquid('{{x | map: "y" | first}}').render(x=[{}]) == "None"
     assert Liquid('{{x | liquid_map: "y" | first}}').render(x=[{"y": 1}]) == "1"
-    assert Liquid('{{x | liquid_map: "y" | last}}').render(
-        x=[namedtuple("X", "y")(2)]
-    ) == "2"
+    assert (
+        Liquid('{{x | liquid_map: "y" | last}}').render(x=[namedtuple("X", "y")(2)])
+        == "2"
+    )

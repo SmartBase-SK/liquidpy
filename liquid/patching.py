@@ -7,6 +7,7 @@ Including
 3. Adding liquid_cycle method to LoopContext to allow cycle to have a name
 4. Patching Parser.parse_for to allow arguments for tag 'for'
 """
+
 from typing import Any
 from jinja2 import nodes
 from jinja2.parser import Parser
@@ -32,9 +33,7 @@ def parse_if(self) -> nodes.Node:
             result.elif_.append(node)
             continue
         elif token.test("name:else"):
-            result.else_ = self.parse_statements(
-                ("name:endif",), drop_needle=True
-            )
+            result.else_ = self.parse_statements(("name:endif",), drop_needle=True)
         break
     return result
 
@@ -95,6 +94,13 @@ def parse_for(self) -> nodes.Node:
 
 
 jinja_parse_for = Parser.parse_for
+
+
+class LiquidParser(Parser):
+    """Jinja parser with Liquid conditional and loop syntax."""
+
+    parse_if = parse_if
+    parse_for = parse_for
 
 
 def patch_jinja():

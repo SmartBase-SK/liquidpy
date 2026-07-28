@@ -35,6 +35,23 @@ env = Environment(loader=FileSystemLoader('./'), ...)
 liq = Liquid.from_env("/path/to/template.html", env)
 ```
 
+Configuring an existing environment in place
+```python
+from jinja2 import DictLoader
+from liquid import LiquidEnvironment, configure_environment
+
+env = LiquidEnvironment(loader=DictLoader({
+    "main": "{% render 'card', title: title %}",
+    "card": "<h2>{{ title }}</h2>",
+}))
+configure_environment(env, mode="shopify")
+ret = env.get_template("main").render(title="LiquidPy")
+```
+
+Shopify `render` uses an isolated scope containing its named arguments.
+Applications can explicitly propagate shared values by setting
+`env.liquid_render_context_names`.
+
 ### Switching to a different mode
 
 ```python

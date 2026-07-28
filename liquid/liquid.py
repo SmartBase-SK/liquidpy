@@ -1,4 +1,5 @@
 """Provides Liquid class"""
+
 import builtins
 from typing import Any, Callable, Mapping, Optional
 from jinja2 import (
@@ -8,7 +9,116 @@ from jinja2 import (
 )
 
 from .filters.standard import standard_filter_manager
+from .environment import LiquidEnvironment, configure_environment_class
 from .utils import PathType, PathTypeOrIter
+
+
+def configure_environment(
+    env: Environment,
+    mode: Optional[str] = None,
+    filter_with_colon: Optional[bool] = None,
+    globals: Optional[Mapping[str, Any]] = None,
+    filters: Optional[Mapping[str, Callable]] = None,
+    filters_as_globals: Optional[bool] = None,
+    extension_config: Optional[Mapping[str, Any]] = None,
+) -> Environment:
+    """Install Liquid syntax, filters, and globals into an existing environment."""
+    from .defaults import (
+        FILTERS_AS_GLOBALS,
+        FILTER_WITH_COLON,
+        MODE,
+        SHARED_GLOBALS,
+    )
+
+    if mode is None:
+        mode = MODE
+    if filter_with_colon is None:
+        filter_with_colon = FILTER_WITH_COLON
+    if filters_as_globals is None:
+        filters_as_globals = FILTERS_AS_GLOBALS
+
+    configure_environment_class(env)
+    env.extend(**dict(extension_config or {}))
+    env.globals.update(SHARED_GLOBALS)
+    standard_filter_manager.update_to_env(env)
+    env.add_extension("jinja2.ext.loopcontrols")
+    if filter_with_colon:
+        from .exts.filter_colon import FilterColonExtension
+
+        env.add_extension(FilterColonExtension)
+
+    if mode == "wild":
+        from .exts.wild import LiquidWildExtension
+        from .filters.wild import wild_filter_manager
+
+        env.add_extension("jinja2.ext.debug")
+        env.add_extension(LiquidWildExtension)
+
+        bfilters = {
+            key: getattr(builtins, key)
+            for key in dir(builtins)
+            if not key.startswith("_")
+            and callable(getattr(builtins, key))
+            and key
+            not in (
+                "copyright",
+                "credits",
+                "input",
+                "help",
+                "globals",
+                "license",
+                "locals",
+                "memoryview",
+                "object",
+                "property",
+                "staticmethod",
+                "super",
+            )
+            and not any(key_c.isupper() for key_c in key)
+        }
+        env.filters.update(bfilters)
+        wild_filter_manager.update_to_env(env)
+        env.globals.update(
+            {key: val for key, val in __builtins__.items() if not key.startswith("_")}
+        )
+        if filters_as_globals:
+            env.globals.update(standard_filter_manager.filters)
+            env.globals.update(wild_filter_manager.filters)
+
+    elif mode == "jekyll":
+        from .exts.front_matter import FrontMatterExtension
+        from .exts.jekyll import LiquidJekyllExtension
+        from .filters.jekyll import jekyll_filter_manager
+
+        jekyll_filter_manager.update_to_env(env)
+        env.add_extension(FrontMatterExtension)
+        env.add_extension(LiquidJekyllExtension)
+
+    elif mode == "shopify":
+        from .exts.shopify import LiquidShopifyExtension
+        from .filters.shopify import shopify_filter_manager
+
+        shopify_filter_manager.update_to_env(env)
+        env.add_extension(LiquidShopifyExtension)
+
+    else:
+        from .exts.standard import LiquidStandardExtension
+
+        env.add_extension(LiquidStandardExtension)
+
+    if filters:
+        env.filters.update(filters)
+
+    builtin_globals = {
+        "int": int,
+        "float": float,
+        "str": str,
+        "bool": bool,
+    }
+    if globals:
+        builtin_globals.update(globals)
+    env.globals.update(builtin_globals)
+    return env
 
 
 class Liquid:
@@ -67,7 +177,6 @@ class Liquid:
             FILTER_WITH_COLON,
             SEARCH_PATHS,
             ENV_ARGS,
-            SHARED_GLOBALS,
             FILTERS_AS_GLOBALS,
         )
 
@@ -99,95 +208,19 @@ class Liquid:
         else:
             loader = fsloader
 
-        self.env = Environment(**env_args, loader=loader)
+        self.env = LiquidEnvironment(**env_args, loader=loader)
         if env is not None:
             self.env = env.overlay(**env_args, loader=loader)
 
-        self.env.extend(**ext_conf)
-        self.env.globals.update(SHARED_GLOBALS)
-
-        standard_filter_manager.update_to_env(self.env)
-        self.env.add_extension("jinja2.ext.loopcontrols")
-        if filter_with_colon:
-            from .exts.filter_colon import FilterColonExtension
-
-            self.env.add_extension(FilterColonExtension)
-
-        if mode == "wild":
-            from .exts.wild import LiquidWildExtension
-            from .filters.wild import wild_filter_manager
-
-            self.env.add_extension("jinja2.ext.debug")
-            self.env.add_extension(LiquidWildExtension)
-
-            bfilters = {
-                key: getattr(builtins, key)
-                for key in dir(builtins)
-                if not key.startswith("_")
-                and callable(getattr(builtins, key))
-                and key
-                not in (
-                    "copyright",
-                    "credits",
-                    "input",
-                    "help",
-                    "globals",
-                    "license",
-                    "locals",
-                    "memoryview",
-                    "object",
-                    "property",
-                    "staticmethod",
-                    "super",
-                )
-                and not any(key_c.isupper() for key_c in key)
-            }
-            self.env.filters.update(bfilters)
-            wild_filter_manager.update_to_env(self.env)
-            self.env.globals.update(
-                {
-                    key: val
-                    for key, val in __builtins__.items()
-                    if not key.startswith("_")
-                }
-            )
-            if filters_as_globals:
-                self.env.globals.update(standard_filter_manager.filters)
-                self.env.globals.update(wild_filter_manager.filters)
-
-        elif mode == "jekyll":
-            from .exts.front_matter import FrontMatterExtension
-            from .exts.jekyll import LiquidJekyllExtension
-            from .filters.jekyll import jekyll_filter_manager
-
-            jekyll_filter_manager.update_to_env(self.env)
-            self.env.add_extension(FrontMatterExtension)
-            self.env.add_extension(LiquidJekyllExtension)
-
-        elif mode == "shopify":
-            from .exts.shopify import LiquidShopifyExtension
-            from .filters.shopify import shopify_filter_manager
-
-            shopify_filter_manager.update_to_env(self.env)
-            self.env.add_extension(LiquidShopifyExtension)
-
-        else:  # standard
-            from .exts.standard import LiquidStandardExtension
-
-            self.env.add_extension(LiquidStandardExtension)
-
-        if filters:
-            self.env.filters.update(filters)
-
-        builtin_globals = {
-            "int": int,
-            "float": float,
-            "str": str,
-            "bool": bool
-        }
-        if globals:
-            builtin_globals.update(globals)
-        self.env.globals.update(builtin_globals)
+        configure_environment(
+            self.env,
+            mode=mode,
+            filter_with_colon=filter_with_colon,
+            globals=globals,
+            filters=filters,
+            filters_as_globals=filters_as_globals,
+            extension_config=ext_conf,
+        )
 
         if from_file:
             # in case template is a PathLike

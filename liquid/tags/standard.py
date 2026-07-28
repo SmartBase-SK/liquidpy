@@ -1,4 +1,5 @@
 """Provides standard liquid tags"""
+
 from typing import TYPE_CHECKING, List, Union
 from jinja2 import nodes
 from jinja2.exceptions import TemplateSyntaxError
@@ -33,11 +34,11 @@ def comment(token: "Token", parser: "Parser") -> nodes.Node:
     """
     if parser.stream.current.type is TOKEN_BLOCK_END:
         # no args provided, ignore whatever
-        parser.parse_statements(("name:endcomment", ), drop_needle=True)
+        parser.parse_statements(("name:endcomment",), drop_needle=True)
         return nodes.Output([], lineno=token.lineno)
 
     args = parser.parse_expression()
-    body = parser.parse_statements(("name:endcomment", ), drop_needle=True)
+    body = parser.parse_statements(("name:endcomment",), drop_needle=True)
     body = decode_raw(body[0].nodes[0].data)  # type: ignore
     body_parts = body.split("\n", 1)
     if not body_parts[0]:
@@ -149,7 +150,7 @@ def case(token: "Token", parser: "Parser") -> nodes.Node:
 
     if token.type != "block_begin":
         raise TemplateSyntaxError(
-            "Expected 'begin of statement block', " f"but got {token}",
+            f"Expected 'begin of statement block', but got {token}",
             token.lineno,
         )
 
@@ -166,9 +167,7 @@ def case(token: "Token", parser: "Parser") -> nodes.Node:
             ],
             lineno=token.lineno,
         )
-        node.body = parser.parse_statements(
-            ("name:when", "name:else", "name:endcase")
-        )
+        node.body = parser.parse_statements(("name:when", "name:else", "name:endcase"))
         node.elif_ = []
         node.else_ = []
         token = next(parser.stream)
@@ -177,17 +176,13 @@ def case(token: "Token", parser: "Parser") -> nodes.Node:
             result.elif_.append(node)
             continue
         if token.test("name:else"):
-            result.else_ = parser.parse_statements(
-                ("name:endcase",), drop_needle=True
-            )
+            result.else_ = parser.parse_statements(("name:endcase",), drop_needle=True)
         break
     return result
 
 
 @standard_tags.register
-def tablerow(
-    token: "Token", parser: "Parser"
-) -> Union[nodes.Node, List[nodes.Node]]:
+def tablerow(token: "Token", parser: "Parser") -> Union[nodes.Node, List[nodes.Node]]:
     """The tablerow tag {% tablerow ... %} ... {% endtablerow %}
 
     Args:
@@ -197,7 +192,7 @@ def tablerow(
     Returns:
         The parsed node
     """
-    target = parser.parse_assign_target(extra_end_rules=("name:in", ))
+    target = parser.parse_assign_target(extra_end_rules=("name:in",))
     parser.stream.expect("name:in")
     iter_ = parser.parse_tuple(
         with_condexpr=False,
@@ -350,8 +345,7 @@ def cycle(token: "Token", parser: "Parser") -> nodes.Node:
     With name: {% cycle "name": "one", "two", "three" %}
     Without: {% cycle "one", "two", "three" %}
 
-    Turn these to
-    {{ loop.liquid_cycle("one", "two", "three", name=...) }}
+    Turn these into a call scoped to the active loop.
 
     Args:
         token: The token matches tag name
@@ -375,10 +369,11 @@ def cycle(token: "Token", parser: "Parser") -> nodes.Node:
     return nodes.Output(
         [
             nodes.Call(
-                nodes.Getattr(
-                    nodes.Name("loop", "load"), "liquid_cycle", "load"
-                ),
-                args.items if isinstance(args, nodes.Tuple) else [args],
+                nodes.Name("_liquid_cycle", "load"),
+                [
+                    nodes.Name("loop", "load"),
+                    *(args.items if isinstance(args, nodes.Tuple) else [args]),
+                ],
                 [nodes.Keyword("name", nodes.Const(cycler_name))],
                 None,
                 None,

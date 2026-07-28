@@ -14,6 +14,7 @@ from jinja2.lexer import (
 
 from ..utils import peek_tokens
 from ..tags.standard import standard_tags
+from ..patching import cycle
 
 from .ext import LiquidExtension
 
@@ -36,16 +37,14 @@ class LiquidStandardExtension(LiquidExtension):
 
     def __init__(self, environment):
         super().__init__(environment)
-        environment.tests["contains"] = lambda cont, elm: cont.__contains__(
-            elm
-        )
+        environment.tests["contains"] = lambda cont, elm: cont.__contains__(elm)
+        environment.globals["_liquid_cycle"] = cycle
 
     def filter_stream(self, stream: "TokenStream") -> Generator:
         """Supports for liquid features"""
         for token in stream:
             # .size => .__len__()
             if token.type is TOKEN_DOT:
-
                 if stream.current.test("name:size"):
                     stream.skip()  # skip 'size'
                     yield token

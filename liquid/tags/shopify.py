@@ -2,6 +2,9 @@
 see: https://shopify.dev/api/liquid/tags
 """
 
+from jinja2 import nodes
+from jinja2.exceptions import TemplateSyntaxError
+
 from .manager import TagManager
 from .standard import (
     comment,
@@ -28,5 +31,34 @@ shopify_tags.register(increment)
 shopify_tags.register(decrement)
 shopify_tags.register(cycle)
 
+
+@shopify_tags.register
+def render(token, parser):
+    """Parsed by ``LiquidShopifyExtension`` to preserve isolated scope."""
+    raise AssertionError("render must be parsed by LiquidShopifyExtension")
+
+
+@shopify_tags.register
+def style(token, parser):
+    """Render the tag body as an inline style block."""
+    if not parser.stream.current.test("block_end"):
+        raise TemplateSyntaxError(
+            "The style tag does not accept arguments",
+            token.lineno,
+        )
+    body = parser.parse_statements(("name:endstyle",), drop_needle=True)
+    return [
+        nodes.Output(
+            [nodes.TemplateData("<style>")],
+            lineno=token.lineno,
+        ),
+        *body,
+        nodes.Output(
+            [nodes.TemplateData("</style>")],
+            lineno=token.lineno,
+        ),
+    ]
+
+
 # https://shopify.dev/api/liquid/tags/theme-tags
-# TODO: echo, form, layout, liquid, paginate, render, section, style
+# TODO: echo, form, layout, liquid, paginate, section

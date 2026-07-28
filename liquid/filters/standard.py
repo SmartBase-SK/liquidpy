@@ -1,10 +1,13 @@
 """Provides standard liquid filters"""
+
 import re
 import math
 import html
 from datetime import datetime
 
+from jinja2 import pass_environment
 from jinja2.filters import FILTERS
+from jinja2.runtime import Undefined
 
 from .manager import FilterManager
 
@@ -14,6 +17,7 @@ standard_filter_manager = FilterManager()
 
 class DateTime:
     """Date time allows plus/minus operation"""
+
     def __init__(self, dt: datetime, fmt: str) -> None:
         self.dt = dt
         self.fmt = fmt
@@ -86,17 +90,17 @@ class EmptyDrop:
         return False
 
 
-def _get_prop(obj, prop, _raise=False):
+def _get_prop(environment, obj, prop, _raise=False):
     """Get the property of the object, allow via getitem"""
     try:
         return obj[prop]
     except (TypeError, KeyError):
-        try:
-            return getattr(obj, prop)
-        except AttributeError:
+        value = environment.getattr(obj, prop)
+        if isinstance(value, Undefined):
             if _raise:  # pragma: no cover
-                raise
+                raise AttributeError(prop)
             return None
+        return value
 
 
 # Jinja comes with thses filters
@@ -145,7 +149,25 @@ def prepend(base, prefix):
 @standard_filter_manager.register
 def times(base, sep):
     """Implementation of *"""
-    return base * sep
+    return _liquid_number(base) * _liquid_number(sep)
+
+
+def _liquid_number(value):
+    if isinstance(value, bool):
+        raise TypeError("The times filter requires numeric values")
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, DateTime):
+        value = str(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                return float(value)
+            except ValueError:
+                pass
+    raise TypeError("The times filter requires numeric values")
 
 
 @standard_filter_manager.register
@@ -189,7 +211,8 @@ def liquid_date(base, fmt):
     elif isinstance(base, (int, float)):
         dtime = datetime.fromtimestamp(base)
     else:
-        from dateutil import parser    # type: ignore
+        from dateutil import parser  # type: ignore
+
         dtime = parser.parse(base)
 
     return DateTime(dtime, fmt)
@@ -348,22 +371,25 @@ def url_encode(base):
 
 
 @standard_filter_manager.register
-def where(base, prop, value):
+@pass_environment
+def where(environment, base, prop, value):
     """Query a list of objects with a given property value"""
-    ret = [bas for bas in base if _get_prop(bas, prop) == value]
+    ret = [bas for bas in base if _get_prop(environment, bas, prop) == value]
     return ret or EmptyDrop()
 
 
 @standard_filter_manager.register(["liquid_map", "map"])
-def liquid_map(base, prop):
+@pass_environment
+def liquid_map(environment, base, prop):
     """Map a property to a list of objects"""
-    return [_get_prop(bas, prop) for bas in base]
+    return [_get_prop(environment, bas, prop) for bas in base]
 
 
 @standard_filter_manager.register
-def attr(base, prop):
+@pass_environment
+def attr(environment, base, prop):
     """Similar as `__getattr__()` but also works like `__getitem__()"""
-    return _get_prop(base, prop)
+    return _get_prop(environment, base, prop)
 
 
 # @standard_filter_manager.register
@@ -417,4 +443,4 @@ def regex_replace(
     if not case_sensitive:
         args["flags"] = re.IGNORECASE
 
-    return re.sub(**args)    # type: ignore
+    return re.sub(**args)  # type: ignore
