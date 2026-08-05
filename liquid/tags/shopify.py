@@ -18,7 +18,6 @@ from .standard import (
     cycle,
 )
 
-
 shopify_tags = TagManager()
 
 shopify_tags.register(comment, raw=True)
@@ -30,6 +29,15 @@ shopify_tags.register(tablerow)
 shopify_tags.register(increment)
 shopify_tags.register(decrement)
 shopify_tags.register(cycle)
+
+
+@shopify_tags.register
+def echo(token, parser):
+    """Output an expression from either a standalone or ``liquid`` tag."""
+    return nodes.Output(
+        [parser.parse_expression()],
+        lineno=token.lineno,
+    )
 
 
 @shopify_tags.register
@@ -61,4 +69,4 @@ def style(token, parser):
 
 
 # https://shopify.dev/api/liquid/tags/theme-tags
-# TODO: echo, form, layout, liquid, paginate, section
+# TODO: form, layout, paginate, section
