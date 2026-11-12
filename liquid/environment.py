@@ -41,7 +41,8 @@ def _resolve_attribute(
         elif attribute == "rindex0":
             attribute = "revindex0"
         if attribute in _LOOP_ATTRIBUTES:
-            return fallback(obj, attribute)
+            # Jinja's own fixed loop attributes; the sandbox checks cost ~0.5 µs each.
+            return getattr(obj, attribute)
     if attribute == "__len__":
         try:
             return obj.__len__
