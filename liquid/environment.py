@@ -73,7 +73,6 @@ class LiquidEnvironmentMixin:
         defer_init: bool = False,
     ) -> str:
         source = share_block_assignments(self, source)
-        source.set_environment(self)
         return super()._generate(  # type: ignore[misc]
             source, name, filename, defer_init=defer_init
         )
@@ -109,7 +108,6 @@ def configure_environment_class(environment: Environment) -> None:
         defer_init: bool = False,
     ) -> str:
         source = share_block_assignments(environment, source)
-        source.set_environment(environment)
         return fallback_generate(source, name, filename, defer_init=defer_init)
 
     environment.getattr = liquid_getattr

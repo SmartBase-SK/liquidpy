@@ -31,6 +31,19 @@ ITEMS = ["", "a", "b"]
             id="counter",
         ),
         pytest.param(
+            "{% assign value = 1 %}{% for item in items %}"
+            "{% if forloop.first %}{% assign value = 5 %}{% endif %}{{ value }}"
+            "{% endfor %}",
+            "555",
+            id="conditional-assign-read-later",
+        ),
+        pytest.param(
+            "{% for item in items %}{% assign label = item | append: '!' %}"
+            "{{ label }}{% endfor %}[{{ label }}]",
+            "!a!b![b!]",
+            id="temporary-assigned-first",
+        ),
+        pytest.param(
             "{% assign count = 0 %}{% for row in items %}{% for col in items %}"
             "{% assign count = count | plus: 1 %}{% endfor %}{% endfor %}[{{ count }}]",
             "[9]",
@@ -102,6 +115,27 @@ def test_configured_environments_keep_loop_assignments(environment):
     assert env.get_template("main").render(items=[1, 2, 3]) == "6"
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "{%- liquid\n  assign count = 0\n  for item in items\n"
+            "    assign count = count | plus: 1\n  endfor\n-%}[{{ count }}]",
+            "[3]",
+            id="liquid-tag",
+        ),
+        pytest.param(
+            "{% tablerow item in items %}{% assign last = item %}{% endtablerow %}"
+            "[{{ last }}]",
+            "[b]",
+            id="tablerow",
+        ),
+    ],
+)
+def test_shopify_blocks_keep_loop_assignments(set_default_shopify, source, expected):
+    assert Liquid(source).render(items=ITEMS).endswith(expected)
+
+
 def test_rendered_snippets_keep_their_own_assigned_values():
     env = LiquidEnvironment(
         loader=DictLoader(
@@ -152,7 +186,7 @@ def test_the_assign_scope_filters_are_reserved():
         loader=DictLoader(
             {
                 "loop": "{% for item in items %}{% assign last = item %}{% endfor %}",
-                "misuse": "{{ items | _liquid_new_assign_scope }}",
+                "misuse": "{{ items | _liquid_store_assigned }}",
             }
         )
     )
