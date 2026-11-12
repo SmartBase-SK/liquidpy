@@ -214,6 +214,35 @@ def test_scopes_built_by_extensions_stay_local_beside_loop_assignments():
     assert env.get_template("main").render(items=ITEMS) == "[outer]"
 
 
+def test_a_loop_inside_a_local_scope_does_not_leak_into_the_next_iteration():
+    env = LiquidEnvironment(
+        loader=DictLoader(
+            {
+                "main": "{% assign x = 0 %}{% for a in items %}[{{ x }}]"
+                "{% assign x = 1 %}{% local %}{% for b in items %}{% assign x = 2 %}"
+                "{% endfor %}{% endlocal %}{% endfor %}[{{ x }}]"
+            }
+        ),
+        extensions=[_LocalBlockExtension],
+    )
+    configure_environment(env, mode="shopify")
+    assert env.get_template("main").render(items=["a", "b"]) == "[0][1][1]"
+
+
+def test_configuring_a_plain_environment_twice_compiles_the_same_code():
+    source = (
+        "{% assign total = 0 %}{% for item in items %}"
+        "{% assign total = total | plus: 1 %}{% endfor %}{{ total }}"
+    )
+    once = Environment()
+    configure_environment(once, mode="shopify")
+    twice = Environment()
+    configure_environment(twice, mode="shopify")
+    configure_environment(twice, mode="shopify")
+    assert twice.compile(source, raw=True) == once.compile(source, raw=True)
+    assert twice.from_string(source).render(items=ITEMS) == "3"
+
+
 def test_scopes_built_by_extensions_stay_local():
     env = LiquidEnvironment(
         loader=DictLoader(

@@ -89,7 +89,9 @@ class LiquidEnvironmentMixin:
 def configure_environment_class(environment: Environment) -> None:
     """Install Liquid parser and lookup behavior on a plain Jinja environment."""
     install_assign_scope_filters(environment)
-    if isinstance(environment, LiquidEnvironmentMixin):
+    if isinstance(environment, LiquidEnvironmentMixin) or getattr(
+        environment, "liquid_configured", False
+    ):
         return
 
     fallback_getattr = environment.getattr
@@ -119,6 +121,7 @@ def configure_environment_class(environment: Environment) -> None:
     environment.getattr = liquid_getattr
     environment._parse = liquid_parse
     environment._generate = liquid_generate
+    environment.liquid_configured = True
 
 
 class LiquidEnvironment(LiquidEnvironmentMixin, Environment):

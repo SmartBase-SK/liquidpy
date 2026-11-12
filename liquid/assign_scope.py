@@ -6,7 +6,8 @@ Each such block stores the current value of the names assigned inside it before
 it starts, stores them again after every assignment, and reads them back at the
 start of every iteration and after the block. The store lives on the render's
 ``Context``. Scopes built by extensions (``nodes.Scope``, ``With``,
-``CallBlock`` ...) stay local.
+``CallBlock`` ...) stay local: inside a block, the names assigned under them are
+stored again after them.
 
 The store is reached through context filters, which Jinja calls directly,
 because a call expression goes through ``context.call`` and, in a sandbox, its
@@ -16,7 +17,17 @@ checks. Their names are not valid filter names in template source.
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
+from typing import (
+    Any,
+    Collection,
+    Dict,
+    FrozenSet,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+)
 
 from jinja2 import nodes, pass_context
 from jinja2.environment import Environment
@@ -77,13 +88,20 @@ class _Rewriter:
     def __init__(self, environment: Environment) -> None:
         self.environment = environment
         self._inside: Dict[int, FrozenSet[str]] = {}
+        self._anywhere: Dict[int, FrozenSet[str]] = {}
 
     def statements(self, body: List[nodes.Node], in_block: bool) -> List[nodes.Node]:
         result: Optional[List[nodes.Node]] = None
         for index, statement in enumerate(body):
             rewritten = self.node(statement, in_block)
             names = self.inside(statement) if type(statement) in _BLOCKS else ()
-            stored = _target_names(statement) if in_block else ()
+            stored: Collection[str] = ()
+            if in_block:
+                stored = (
+                    self.anywhere(statement)
+                    if isinstance(statement, _LOCAL_SCOPES)
+                    else _target_names(statement)
+                )
             if result is None:
                 if rewritten is statement and not names and not stored:
                     continue
@@ -134,6 +152,19 @@ class _Rewriter:
                 for name in self._assigned_by(statement)
             )
             self._inside[id(node)] = names
+        return names
+
+    def anywhere(self, node: nodes.Node) -> FrozenSet[str]:
+        """Names assigned below ``node``, local scopes included."""
+        names = self._anywhere.get(id(node))
+        if names is None:
+            names = frozenset(
+                name
+                for _, body in _statement_lists(node)
+                for statement in body
+                for name in (*_target_names(statement), *self.anywhere(statement))
+            )
+            self._anywhere[id(node)] = names
         return names
 
     def _assigned_by(self, statement: nodes.Node) -> Iterator[str]:
