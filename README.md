@@ -52,6 +52,9 @@ Shopify `render` uses an isolated scope containing its named arguments.
 Applications can explicitly propagate shared values by setting
 `env.liquid_render_context_names`.
 
+As in Liquid, an `assign` or `capture` inside `for` or `capture` keeps its value
+after the block and in the next iteration. Scopes built by extensions stay local.
+
 ### Switching to a different mode
 
 ```python

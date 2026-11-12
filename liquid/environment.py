@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
-from jinja2 import Environment
+from jinja2 import Environment, nodes
 from jinja2.runtime import LoopContext
 
+from .assign_scope import share_block_assignments
 from .patching import LiquidParser
 
 
@@ -64,6 +65,19 @@ class LiquidEnvironmentMixin:
     def _parse(self, source: str, name: str, filename: str) -> Any:
         return LiquidParser(self, source, name, filename).parse()
 
+    def _generate(
+        self,
+        source: nodes.Template,
+        name: Optional[str],
+        filename: Optional[str],
+        defer_init: bool = False,
+    ) -> str:
+        source = share_block_assignments(self, source)
+        source.set_environment(self)
+        return super()._generate(  # type: ignore[misc]
+            source, name, filename, defer_init=defer_init
+        )
+
     def getattr(self, obj: Any, attribute: str) -> Any:
         return _resolve_attribute(self, obj, attribute, super().getattr)
 
@@ -86,8 +100,21 @@ def configure_environment_class(environment: Environment) -> None:
     def liquid_parse(source: str, name: str, filename: str) -> Any:
         return LiquidParser(environment, source, name, filename).parse()
 
+    fallback_generate = environment._generate
+
+    def liquid_generate(
+        source: nodes.Template,
+        name: Optional[str],
+        filename: Optional[str],
+        defer_init: bool = False,
+    ) -> str:
+        source = share_block_assignments(environment, source)
+        source.set_environment(environment)
+        return fallback_generate(source, name, filename, defer_init=defer_init)
+
     environment.getattr = liquid_getattr
     environment._parse = liquid_parse
+    environment._generate = liquid_generate
 
 
 class LiquidEnvironment(LiquidEnvironmentMixin, Environment):
