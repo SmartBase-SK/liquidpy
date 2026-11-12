@@ -5,7 +5,6 @@ from jinja2 import nodes
 from jinja2.exceptions import TemplateSyntaxError
 from jinja2.lexer import TOKEN_BLOCK_END, TOKEN_COLON, TOKEN_STRING
 
-from ..assign_scope import note_assignment
 from ..utils import peek_tokens, parse_tag_args
 from .manager import TagManager, decode_raw
 
@@ -63,7 +62,6 @@ def capture(token: "Token", parser: "Parser") -> nodes.Node:
     Returns:
         The parsed node
     """
-    note_assignment(parser)
     target = parser.parse_assign_target(with_namespace=True)
     filter_node = parser.parse_filter(None)
     body = parser.parse_statements(("name:endcapture",), drop_needle=True)
@@ -81,7 +79,6 @@ def assign(token: "Token", parser: "Parser") -> nodes.Node:
     Returns:
         The parsed node
     """
-    note_assignment(parser)
     target = parser.parse_assign_target(with_namespace=True)
     parser.stream.expect("assign")
     expr = parser.parse_tuple()
@@ -294,7 +291,6 @@ def increment(token: "Token", parser: "Parser") -> List[nodes.Node]:
     Returns:
         The parsed node
     """
-    note_assignment(parser)
     variable = parser.stream.expect("name")
     varname = f"_liquid_xcrement_{variable.value}"
     varnode = nodes.Name(varname, "load")
@@ -324,7 +320,6 @@ def decrement(token: "Token", parser: "Parser") -> List[nodes.Node]:
     Returns:
         The parsed node
     """
-    note_assignment(parser)
     variable = parser.stream.expect("name")
     varname = f"_liquid_xcrement_{variable.value}"
     varnode = nodes.Name(varname, "load")

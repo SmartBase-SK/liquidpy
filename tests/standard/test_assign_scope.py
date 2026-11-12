@@ -1,6 +1,5 @@
 import pytest
-from jinja2 import DictLoader, Environment, nodes
-from jinja2.exceptions import TemplateSyntaxError
+from jinja2 import BytecodeCache, DictLoader, Environment, nodes
 from jinja2.ext import Extension
 from jinja2.sandbox import SandboxedEnvironment
 
@@ -88,6 +87,39 @@ ITEMS = ["", "a", "b"]
             "012|3",
             id="increment-in-loop",
         ),
+        pytest.param(
+            "{% for item in items %}{% decrement counter %}{% endfor %}"
+            "|{% decrement counter %}",
+            "-1-2-3|-4",
+            id="decrement-in-loop",
+        ),
+        pytest.param(
+            "{% for item in items %}{% capture label %}"
+            "{% assign last = item %}{{ item }}{% endcapture %}{% endfor %}"
+            "[{{ last }}][{{ label }}]",
+            "[b][b]",
+            id="assign-in-capture-in-loop",
+        ),
+        pytest.param(
+            "{% for item in no_items %}{% assign value = item %}"
+            "{% else %}{% assign value = 'empty' %}{% endfor %}[{{ value }}]",
+            "[empty]",
+            id="for-else",
+        ),
+        pytest.param(
+            "{% for item in items %}{% assign x = item %}{% endfor %}"
+            "{% for row in items %}{% for x in items %}{% endfor %}"
+            "{% assign seen = x %}{% endfor %}[{{ x }}][{{ seen }}]",
+            "[b][b]",
+            id="inner-loop-target-named-like-an-assigned-name",
+        ),
+        pytest.param(
+            "{% macro show(x, change) %}{% for item in items %}"
+            "{% if change %}{% assign x = item %}{% endif %}{% endfor %}{{ x }}"
+            "{% endmacro %}{{ show('first', 1) }}|{{ show('second', 0) }}",
+            "b|second",
+            id="macro-parameter-not-taken-from-an-earlier-call",
+        ),
     ],
 )
 def test_assign_inside_a_block_is_visible_after_it(
@@ -165,6 +197,23 @@ class _LocalBlockExtension(Extension):
         )
 
 
+def test_scopes_built_by_extensions_stay_local_beside_loop_assignments():
+    env = LiquidEnvironment(
+        loader=DictLoader(
+            {
+                "main": "{% assign value = 'outer' %}{% for item in items %}"
+                "{% if item == 'never' %}{% assign value = item %}{% endif %}"
+                "{% endfor %}{% local %}{% endlocal %}{% for item in items %}"
+                "{% if item == 'never' %}{% assign value = item %}{% endif %}"
+                "{% endfor %}[{{ value }}]"
+            }
+        ),
+        extensions=[_LocalBlockExtension],
+    )
+    configure_environment(env, mode="shopify")
+    assert env.get_template("main").render(items=ITEMS) == "[outer]"
+
+
 def test_scopes_built_by_extensions_stay_local():
     env = LiquidEnvironment(
         loader=DictLoader(
@@ -181,16 +230,30 @@ def test_scopes_built_by_extensions_stay_local():
     assert env.get_template("main").render(items=ITEMS) == "tag3[outer]"
 
 
-def test_the_assign_scope_filters_are_reserved():
-    env = LiquidEnvironment(
-        loader=DictLoader(
-            {
-                "loop": "{% for item in items %}{% assign last = item %}{% endfor %}",
-                "misuse": "{{ items | _liquid_store_assigned }}",
-            }
-        )
-    )
-    configure_environment(env, mode="shopify")
-    env.get_template("loop")
-    with pytest.raises(TemplateSyntaxError, match="reserved"):
-        env.get_template("misuse")
+class _MemoryBytecodeCache(BytecodeCache):
+    def __init__(self):
+        self.data = {}
+
+    def load_bytecode(self, bucket):
+        if bucket.key in self.data:
+            bucket.bytecode_from_string(self.data[bucket.key])
+
+    def dump_bytecode(self, bucket):
+        self.data[bucket.key] = bucket.bytecode_to_string()
+
+
+def test_templates_loaded_from_the_bytecode_cache_render_in_a_new_environment():
+    cache = _MemoryBytecodeCache()
+    templates = {
+        "main": "{% assign total = 0 %}{% for item in items %}"
+        "{% assign total = total | plus: 1 %}{% endfor %}{{ total }}"
+    }
+
+    def render():
+        env = LiquidEnvironment(loader=DictLoader(templates), bytecode_cache=cache)
+        configure_environment(env, mode="shopify")
+        return env.get_template("main").render(items=ITEMS)
+
+    assert render() == "3"
+    assert cache.data
+    assert render() == "3"

@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional
 from jinja2 import Environment, nodes
 from jinja2.runtime import LoopContext
 
-from .assign_scope import share_block_assignments
+from .assign_scope import install_assign_scope_filters, share_block_assignments
 from .patching import LiquidParser
 
 
@@ -63,6 +63,10 @@ class LiquidEnvironmentMixin:
 
     liquid_allow_object_attributes = True
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        install_assign_scope_filters(self)
+
     def _parse(self, source: str, name: str, filename: str) -> Any:
         return LiquidParser(self, source, name, filename).parse()
 
@@ -84,6 +88,7 @@ class LiquidEnvironmentMixin:
 
 def configure_environment_class(environment: Environment) -> None:
     """Install Liquid parser and lookup behavior on a plain Jinja environment."""
+    install_assign_scope_filters(environment)
     if isinstance(environment, LiquidEnvironmentMixin):
         return
 

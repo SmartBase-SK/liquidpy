@@ -13,11 +13,6 @@ from jinja2 import nodes
 from jinja2.parser import Parser
 from jinja2.runtime import LoopContext
 
-from .assign_scope import (
-    RESERVED_FILTER_PREFIX,
-    mark_parsed_template,
-    reject_reserved_filters,
-)
 from .utils import parse_tag_args
 
 
@@ -106,17 +101,6 @@ class LiquidParser(Parser):
 
     parse_if = parse_if
     parse_for = parse_for
-
-    def __init__(self, environment, source, *args: Any, **kwargs: Any) -> None:
-        super().__init__(environment, source, *args, **kwargs)
-        self.liquid_source = source
-
-    def parse(self) -> nodes.Template:
-        template = super().parse()
-        mark_parsed_template(template, self)
-        if RESERVED_FILTER_PREFIX in self.liquid_source:
-            reject_reserved_filters(template)
-        return template
 
 
 def patch_jinja():
